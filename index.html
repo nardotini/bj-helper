@@ -23,7 +23,7 @@ body{padding:10px;max-width:520px;margin:auto}
 .act .main{flex-basis:100%;background:#1d7a3a;font-size:20px}
 .tools{display:flex;gap:7px;margin-top:12px}
 .tools button{flex:1;height:40px;border-radius:10px;border:0;background:#222c30;color:#9ab;font-size:14px}
-#foot{font-size:12px;color:#7a9;text-align:center;margin-top:10px}
+#foot{white-space:pre-line;font-size:12px;color:#7a9;text-align:center;margin-top:10px}
 #flash{position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#ffd54a;color:#000;font-weight:800;padding:6px 14px;border-radius:20px;opacity:0;transition:opacity .25s;pointer-events:none;font-size:18px}
 </style></head><body>
 <div id="flash"></div>
@@ -78,7 +78,8 @@ function decide(c,up,tc,cd,cs){
   if(d){const[i,a]=d; if(a=='D'&&!cd)return b; if(tc>=i)return a; if(a=='S')return'H'; if(a=='D'&&b=='D')return'H'}
   return b;
 }
-function betUnits(tc){ if(tc<1)return 0; const t=Math.trunc(tc); if(t<=1)return 1; return Math.max(1,Math.min(12,(t-1)*2)); }
+function betUnits(tc){ if(tc<1)return 0; const t=Math.trunc(tc); if(t<=1)return 1; return Math.max(1,Math.min(MAXU,(t-1)*2)); }
+const MAXU=4;
 
 // ---- guided flow ----
 const NM=c=>c==11?'A':c==10?'10':String(c);
@@ -130,7 +131,8 @@ function act(a){snap();buzz();
   save();render()}
 function undo(){const h=H.pop();if(h){S=JSON.parse(h);save();render();flash('Undone')}}
 function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return;
-  snap();Object.assign(S,{rc:0,n:0,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:''});save();render()}
+  snap();if(S.n>20){S.shoes=(S.shoes||[]).concat([S.n]).slice(-5)}
+  Object.assign(S,{rc:0,n:0,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:''});save();render()}
 function setUnit(){const v=prompt('How much is 1 unit in $?',S.unit);if(v&&+v>0){S.unit=+v;save();render()}}
 
 function render(){
@@ -150,6 +152,9 @@ function render(){
     step='STEP 2 of 3'+(S.split?' · split hand '+S.split:'');title='Your hand';
     hand=`Dealer: <b>${NM(S.up)}</b> &nbsp;·&nbsp; You: <b>${S.mine.map(NM).join(' ')||'–'}</b>${S.mine.length?' = '+(soft?'soft ':'')+t:''}`;
     const p=play();
+    const ins=(S.up==11&&S.mine.length<=2)?(tc()>=3?'<div style="background:#1d7a3a;padding:8px;border-radius:10px;margin:6px 0;font-weight:800">🛡️ Insurance offered? <u>TAKE IT</u> (count is high)</div>'
+      :'<div style="background:#5a1a1a;padding:8px;border-radius:10px;margin:6px 0;font-weight:800">🛡️ Insurance offered? <u>NO</u>, skip it</div>'):'';
+    hand+=ins;
     if(!p){msg=S.split?'Tap the new card for this hand 👇':(S.mine.length?'Tap your other card 👇':'Tap <b>YOUR 2 cards</b> 👇')}
     else{big.style.display='block';big.className=p[0];big.textContent=p[1];msg=HOW[p[0]]||''}
     if(p&&p[0]=='P')A.innerHTML+=btn('✂️ I split','split','main');
@@ -164,7 +169,8 @@ function render(){
       :btn('✅ I won','rW')+btn('❌ I lost','rL')+btn('🤝 Tie','rP')+btn('🎉 Blackjack','rB');
   }
   $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
-  const s=S.stats;$('foot').textContent=`Session ${s.net>=0?'+':''}${s.net} units ($${(s.net*S.unit).toFixed(0)}) · ${s.rounds} rounds · ${S.n} cards seen`;
+  const s=S.stats;$('foot').textContent=`Session ${s.net>=0?'+':''}${s.net} units ($${(s.net*S.unit).toFixed(0)}) · ${s.rounds} rounds · ${S.n} cards seen`+
+    ((S.shoes&&S.shoes.length)?`\nLast shoes dealt: `+S.shoes.map(n=>Math.round(100*n/(S.decks*52))+'%').join(', ')+` (higher = better table)`:'');
 }
 if(typeof module!=='undefined'){module.exports={decide,betUnits,total}}
 else{try{Telegram.WebApp.ready();Telegram.WebApp.expand()}catch(e){} render();}
