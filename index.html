@@ -42,7 +42,7 @@ body{padding:10px;max-width:520px;margin:auto}
 <div class="tools">
   <button onclick="undo()">↶ Undo</button>
   <button onclick="newShoe()">🔀 Dealer shuffled</button>
-  <button onclick="setUnit()">$ Unit</button>
+  <button onclick="setBank()">💵 My balance</button>
 </div>
 <div id="foot"></div>
 
@@ -91,6 +91,8 @@ const fresh=()=>({rc:0,n:0,decks:8,unit:1,phase:'bet',mine:[],up:null,split:0,pa
   stats:{W:0,L:0,P:0,B:0,net:0,rounds:0}});
 let S=JSON.parse(LS.getItem('bjh2')||'null')||fresh(); let H=[];
 if(!S.v2unit){S.unit=1;S.v2unit=true}
+if(S.bank==null)S.bank=100;
+const autoUnit=()=>Math.max(1,Math.floor(S.bank/100)); // 1% of balance, $1 minimum
 const save=()=>LS.setItem('bjh2',JSON.stringify(S));
 const tc=()=>S.rc/Math.max((S.decks*52-S.n)/52,0.5);
 const snap=()=>{H.push(JSON.stringify(S));if(H.length>300)H.shift()};
@@ -126,20 +128,20 @@ function act(a){snap();buzz();
   else if(a=='done')endHand();
   else if(a=='anyway'){S.anyway=true}
   else if(a[0]=='r'){const u=S.bet,r=a[1];
-    if(u>0&&r!='N'){S.stats[r]++;S.stats.rounds++;S.stats.net+={W:u,L:-u,P:0,B:1.5*u}[r]}
+    if(u>0&&r!='N'){S.stats[r]++;S.stats.rounds++;const d={W:u,L:-u,P:0,B:1.5*u}[r]*(S.doubled&&!S.split?2:1);S.stats.net+=d;S.bank=+(S.bank+d*S.unit).toFixed(2)}
     Object.assign(S,{phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',anyway:false});}
   save();render()}
 function undo(){const h=H.pop();if(h){S=JSON.parse(h);save();render();flash('Undone')}}
 function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return;
   snap();if(S.n>20){S.shoes=(S.shoes||[]).concat([S.n]).slice(-5)}
   Object.assign(S,{rc:0,n:0,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:''});save();render()}
-function setUnit(){const v=prompt('How much is 1 unit in $?',S.unit);if(v&&+v>0){S.unit=+v;save();render()}}
+function setBank(){const v=prompt('How much money do you have in your casino account right now? ($)',S.bank);if(v&&+v>0){S.bank=+v;save();render()}}
 
 function render(){
   const big=$('big'),A=$('act');let step='',title='',msg='',hand='';big.style.display='none';A.innerHTML='';
   const btn=(label,a,cls)=>`<button class="${cls||''}" onclick="act('${a}')">${label}</button>`;
   if(S.phase=='bet'){
-    const u=betUnits(tc()); S.bet=S.anyway?Math.max(1,u):u;
+    const u=betUnits(tc()); S.bet=S.anyway?Math.max(1,u):u; S.unit=autoUnit();
     big.style.display='block';
     if(S.bet==0){big.className='sit';big.textContent='⛔ SIT OUT';step='NEW ROUND';title="Don't bet this round";
       msg="Just watch. When cards come out, tap <b>every card</b> you see (dealer + everyone)."+
@@ -169,7 +171,7 @@ function render(){
       :btn('✅ I won','rW')+btn('❌ I lost','rL')+btn('🤝 Tie','rP')+btn('🎉 Blackjack','rB');
   }
   $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
-  const s=S.stats;$('foot').textContent=`Session ${s.net>=0?'+':''}${s.net} units ($${(s.net*S.unit).toFixed(0)}) · ${s.rounds} rounds · ${S.n} cards seen`+
+  const s=S.stats;$('foot').textContent=`Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
     ((S.shoes&&S.shoes.length)?`\nLast shoes dealt: `+S.shoes.map(n=>Math.round(100*n/(S.decks*52))+'%').join(', ')+` (higher = better table)`:'');
 }
 if(typeof module!=='undefined'){module.exports={decide,betUnits,total}}
