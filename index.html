@@ -206,10 +206,11 @@ function render(){
     else{
       const [dt,ds]=total(S.dh||[]); const o=outcome();
       const mine=(S.hands||[]).map(h=>h.c.map(NM).join(' ')+' = '+total(h.c)[0]).join('  |  ');
-      hand=`You: <b>${mine}</b><br>Dealer: <b>${(S.dh||[]).map(NM).join(' ')}</b> = ${ds?'soft ':''}${dt}`;
-      title='Dealer\'s turn';
+      const dl=(S.dh||[]).length;
+      hand=`You: <b>${mine}</b><br>Dealer: <b>${(S.dh||[]).map(NM).join(' ')}</b>${dl>1?' = '+dt:''}`;
+      title='Last step: dealer\'s cards';
       if(!o||o.waiting){
-        msg=(o&&o.waiting?(o.lines.join('<br>')+'<br><br>'):'')+"👆 Tap the <b>dealer's</b> cards as they flip: the hidden card, then any it draws."+
+        msg=(o&&o.waiting?(o.lines.join('<br>')+'<br><br>'):'')+(dl==1?"👆 The dealer will now flip their hidden card. <b>Tap it.</b>":"👆 If the dealer draws another card, <b>tap it</b>.")+"<br><small>The app then tells you if you won.</small>"+
             (S.extra?"<br><b>Next tap = extra card (not the dealer's).</b>":"");
         A.innerHTML=(o&&o.waiting?btn('▶️ Next round','next','main'):'')+btn('➕ Next card is NOT the dealer\'s','extra');
       } else {
