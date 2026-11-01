@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>BJ Helper</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}
+html,body{margin:0;background:#0b1410;color:#eee;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+body{padding:10px;max-width:520px;margin:auto}
+#step{font-size:13px;color:#8fd;font-weight:700;letter-spacing:.5px}
+#title{font-size:22px;font-weight:800;margin:2px 0 6px}
+#msg{font-size:16px;line-height:1.35;color:#cde;min-height:44px}
+#big{margin:8px 0;padding:14px;border-radius:14px;text-align:center;font-size:34px;font-weight:900;display:none}
+.sit{background:#5a1a1a}.bet{background:#1d6b2f}.H{background:#8a6d00}.S{background:#1f4f9a}.D{background:#1d7a3a}.P{background:#7a2a8a}.X{background:#444}
+#hand{font-size:17px;margin:4px 0;color:#fff}
+.pad{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:8px}
+.pad button{height:64px;font-size:26px;font-weight:800;border-radius:12px;border:0;color:#fff;background:#2b3a44}
+.pad button:active,.act button:active{transform:scale(.94);filter:brightness(1.4)}
+.pad .t{font-size:17px}
+.act{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.act button{flex:1 1 40%;height:54px;font-size:17px;font-weight:800;border-radius:12px;border:0;color:#fff;background:#24534a}
+.act .main{flex-basis:100%;background:#1d7a3a;font-size:20px}
+.tools{display:flex;gap:7px;margin-top:12px}
+.tools button{flex:1;height:40px;border-radius:10px;border:0;background:#222c30;color:#9ab;font-size:14px}
+#foot{font-size:12px;color:#7a9;text-align:center;margin-top:10px}
+#flash{position:fixed;top:8px;left:50%;transform:translateX(-50%);background:#ffd54a;color:#000;font-weight:800;padding:6px 14px;border-radius:20px;opacity:0;transition:opacity .25s;pointer-events:none;font-size:18px}
+</style></head><body>
+<div id="flash"></div>
+<div id="step"></div>
+<div id="title"></div>
+<div id="big"></div>
+<div id="hand"></div>
+<div id="msg"></div>
+<div class="pad" id="pad">
+  <button onclick="tap(2)">2</button><button onclick="tap(3)">3</button><button onclick="tap(4)">4</button>
+  <button onclick="tap(5)">5</button><button onclick="tap(6)">6</button><button onclick="tap(7)">7</button>
+  <button onclick="tap(8)">8</button><button onclick="tap(9)">9</button>
+  <button class="t" onclick="tap(10)">10 J<br>Q K</button><button onclick="tap(11)">A</button>
+</div>
+<div class="act" id="act"></div>
+<div class="tools">
+  <button onclick="undo()">↶ Undo</button>
+  <button onclick="newShoe()">🔀 Dealer shuffled</button>
+  <button onclick="setUnit()">$ Unit</button>
+</div>
+<div id="foot"></div>
+
+<script>
+// ---- strategy: 8D, S17, DAS, ENHC, Hi-Lo + Illustrious 18 (verified against bj.py) ----
+const HILO={2:1,3:1,4:1,5:1,6:1,7:0,8:0,9:0,10:-1,11:-1};
+function total(c){let t=c.reduce((a,b)=>a+b,0),a=c.filter(x=>x==11).length;while(t>21&&a){t-=10;a--}return[t,a>0]}
+function basic(c,up,cd,cs){
+  const [t,soft]=total(c);
+  if(cs&&c.length==2&&c[0]==c[1]){const p=c[0];
+    if(p==11&&up!=11)return'P'; if(p==8&&up<10)return'P';
+    if(p==9&&[2,3,4,5,6,8,9].includes(up))return'P'; if(p==7&&up<=7)return'P';
+    if(p==6&&up<=6)return'P'; if(p==4&&(up==5||up==6))return'P'; if((p==2||p==3)&&up<=7)return'P';}
+  if(soft){
+    if(t>=19)return'S';
+    if(t==18){if(up>=3&&up<=6)return cd?'D':'S'; if([2,7,8].includes(up))return'S'; return'H'}
+    if(t==17)return(up>=3&&up<=6&&cd)?'D':'H';
+    if(t==15||t==16)return(up>=4&&up<=6&&cd)?'D':'H';
+    if(t==13||t==14)return(up>=5&&up<=6&&cd)?'D':'H';
+    return'H';}
+  if(t>=17)return'S'; if(t>=13)return up<=6?'S':'H'; if(t==12)return(up>=4&&up<=6)?'S':'H';
+  if(t==11){if(up>=10)return'H';return cd?'D':'H'}
+  if(t==10)return(up<=9&&cd)?'D':'H'; if(t==9)return(up>=3&&up<=6&&cd)?'D':'H'; return'H';
+}
+const I18={'h16-10':[0,'S'],'h15-10':[4,'S'],'p10-5':[5,'P'],'p10-6':[4,'P'],'h10-10':[4,'D'],'h12-3':[2,'S'],
+'h12-2':[3,'S'],'h11-11':[1,'D'],'h9-2':[1,'D'],'h10-11':[4,'D'],'h9-7':[3,'D'],'h16-9':[5,'S'],'h13-2':[-1,'S'],
+'h12-4':[0,'S'],'h12-5':[-2,'S'],'h12-6':[-1,'S'],'h13-3':[-2,'S']};
+function decide(c,up,tc,cd,cs){
+  const b=basic(c,up,cd,cs);
+  if(cs&&c.length==2&&c[0]==10&&c[1]==10){const d=I18['p10-'+up];if(d&&tc>=d[0])return'P'}
+  const [t,soft]=total(c); if(soft)return b;
+  const d=I18['h'+t+'-'+up];
+  if(d){const[i,a]=d; if(a=='D'&&!cd)return b; if(tc>=i)return a; if(a=='S')return'H'; if(a=='D'&&b=='D')return'H'}
+  return b;
+}
+function betUnits(tc){ if(tc<1)return 0; const t=Math.trunc(tc); if(t<=1)return 1; return Math.max(1,Math.min(12,(t-1)*2)); }
+
+// ---- guided flow ----
+const NM=c=>c==11?'A':c==10?'10':String(c);
+const BIG={H:'🟡 HIT',S:'🔵 STAND',D:'🟢 DOUBLE',P:'🟣 SPLIT'};
+const HOW={H:'Take a card in the game, then tap it here.',S:'Stand in the game. Your hand is done.',
+  D:'Press DOUBLE in the game. You get one card. Tap it here.',P:'Press SPLIT in the game, then tap ✂️ below.'};
+let LS;try{LS=window.localStorage;LS.getItem('x')}catch(e){LS={getItem:()=>null,setItem:()=>{}}}
+const fresh=()=>({rc:0,n:0,decks:8,unit:5,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',bet:0,
+  stats:{W:0,L:0,P:0,B:0,net:0,rounds:0}});
+let S=JSON.parse(LS.getItem('bjh2')||'null')||fresh(); let H=[];
+const save=()=>LS.setItem('bjh2',JSON.stringify(S));
+const tc=()=>S.rc/Math.max((S.decks*52-S.n)/52,0.5);
+const snap=()=>{H.push(JSON.stringify(S));if(H.length>300)H.shift()};
+const $=id=>document.getElementById(id);
+function buzz(){try{Telegram.WebApp.HapticFeedback.impactOccurred('light')}catch(e){if(navigator.vibrate)navigator.vibrate(12)}}
+function flash(t){const f=$('flash');f.textContent=t;f.style.opacity=1;clearTimeout(flash.t);flash.t=setTimeout(()=>f.style.opacity=0,450)}
+
+function play(){
+  const m=S.mine; if(m.length<2||S.up==null)return null;
+  const [t]=total(m);
+  if(t>21)return['X','💥 BUST'];
+  if(t==21&&m.length==2&&!S.split)return['X','🎉 BLACKJACK!'];
+  if(S.doubled&&m.length>=3)return['X','✅ Doubled. Done'];
+  if(t==21)return['X','🔵 21. Stand'];
+  if(S.split&&S.pair==11)return['X','✅ Split aces: done'];
+  const cd=m.length==2, cs=m.length==2&&m[0]==m[1]&&!S.split;
+  const a=decide(m,S.up,tc(),cd,cs); return[a,BIG[a]];
+}
+function endHand(){const p=play();const l=p?p[1]:'done';
+  if(S.split==1){S.done=l;S.mine=[S.pair];S.split=2;S.doubled=false;flash('Hand 2');return}
+  S.done=S.split==2&&S.done?S.done+' / '+l:l; S.phase='others';}
+
+function tap(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
+  if(S.phase=='bet'){ // first tap of a round
+    if(S.bet>0){S.up=c;S.phase='mine'} else {S.phase='others'}
+  } else if(S.phase=='mine'){
+    const b=play(); if(b&&b[0]=='D'&&S.mine.length==2)S.doubled=true;
+    S.mine.push(c); const p=play(); if(p&&(p[0]=='S'||p[0]=='X'))endHand();
+  }
+  save();render()}
+function act(a){snap();buzz();
+  if(a=='split'){S.pair=S.mine[0];S.mine=[S.pair];S.split=1}
+  else if(a=='done')endHand();
+  else if(a=='anyway'){S.anyway=true}
+  else if(a[0]=='r'){const u=S.bet,r=a[1];
+    if(u>0&&r!='N'){S.stats[r]++;S.stats.rounds++;S.stats.net+={W:u,L:-u,P:0,B:1.5*u}[r]}
+    Object.assign(S,{phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',anyway:false});}
+  save();render()}
+function undo(){const h=H.pop();if(h){S=JSON.parse(h);save();render();flash('Undone')}}
+function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return;
+  snap();Object.assign(S,{rc:0,n:0,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:''});save();render()}
+function setUnit(){const v=prompt('How much is 1 unit in $?',S.unit);if(v&&+v>0){S.unit=+v;save();render()}}
+
+function render(){
+  const big=$('big'),A=$('act');let step='',title='',msg='',hand='';big.style.display='none';A.innerHTML='';
+  const btn=(label,a,cls)=>`<button class="${cls||''}" onclick="act('${a}')">${label}</button>`;
+  if(S.phase=='bet'){
+    const u=betUnits(tc()); S.bet=S.anyway?Math.max(1,u):u;
+    big.style.display='block';
+    if(S.bet==0){big.className='sit';big.textContent='⛔ SIT OUT';step='NEW ROUND';title="Don't bet this round";
+      msg="Just watch. When cards come out, tap <b>every card</b> you see (dealer + everyone)."+
+          "<br><small>Sitting out is normal at the start of a shoe.</small>";
+      A.innerHTML=btn('🃏 I want to play anyway (min bet)','anyway');}
+    else{big.className='bet';big.textContent='💰 BET $'+(S.bet*S.unit);step='NEW ROUND · STEP 1 of 3';title='Place your bet';
+      msg="When the cards come out, tap the <b>DEALER's</b> face-up card first 👇";}
+  } else if(S.phase=='mine'){
+    const [t,soft]=S.mine.length?total(S.mine):[0,false];
+    step='STEP 2 of 3'+(S.split?' · split hand '+S.split:'');title='Your hand';
+    hand=`Dealer: <b>${NM(S.up)}</b> &nbsp;·&nbsp; You: <b>${S.mine.map(NM).join(' ')||'–'}</b>${S.mine.length?' = '+(soft?'soft ':'')+t:''}`;
+    const p=play();
+    if(!p){msg=S.split?'Tap the new card for this hand 👇':(S.mine.length?'Tap your other card 👇':'Tap <b>YOUR 2 cards</b> 👇')}
+    else{big.style.display='block';big.className=p[0];big.textContent=p[1];msg=HOW[p[0]]||''}
+    if(p&&p[0]=='P')A.innerHTML+=btn('✂️ I split','split','main');
+    A.innerHTML+=btn(S.split==1?'➡️ Hand 1 done → hand 2':'➡️ My hand is done','done');
+  } else if(S.phase=='others'){
+    const sat=S.bet==0;
+    step=sat?'SITTING OUT':'STEP 3 of 3';title=sat?'Tap every card':'Tap the other cards';
+    if(!sat&&S.done)hand='You: <b>'+S.done+'</b>';
+    msg=sat?"Tap <b>every</b> card on the table: dealer and all players. Any order."
+           :"Tap everyone else's cards and the dealer's other cards. Any order.<br>Then tap how you did:";
+    A.innerHTML=sat?btn('✅ Round over → next round','rN','main')
+      :btn('✅ I won','rW')+btn('❌ I lost','rL')+btn('🤝 Tie','rP')+btn('🎉 Blackjack','rB');
+  }
+  $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
+  const s=S.stats;$('foot').textContent=`Session ${s.net>=0?'+':''}${s.net} units ($${(s.net*S.unit).toFixed(0)}) · ${s.rounds} rounds · ${S.n} cards seen`;
+}
+if(typeof module!=='undefined'){module.exports={decide,betUnits,total}}
+else{try{Telegram.WebApp.ready();Telegram.WebApp.expand()}catch(e){} render();}
+</script>
+</body></html>
