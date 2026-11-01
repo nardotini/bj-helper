@@ -41,6 +41,7 @@ body{padding:10px;max-width:520px;margin:auto}
 <div class="act" id="act"></div>
 <div class="tools">
   <button onclick="undo()">↶ Undo</button>
+  <button onclick="skipRound()">⏭ Skip round</button>
   <button onclick="newShoe()">🔀 Dealer shuffled</button>
   <button onclick="setBank()">💵 My balance</button>
 </div>
@@ -97,6 +98,7 @@ let S=JSON.parse(LS.getItem('bjh2')||'null')||fresh(); let H=[];
 if(!S.v2unit){S.unit=1;S.v2unit=true}
 if(S.bank==null)S.bank=100;
 S.table='inf'; setRules('inf');
+if(S.ver!=='v7'){if(S.phase!=='bet')resetRound();S.hands=S.hands||[];S.dh=S.dh||[];S.ver='v7'}
 const autoUnit=()=>Math.max(1,Math.floor(S.bank/100)); // 1% of balance, $1 minimum
 const save=()=>LS.setItem('bjh2',JSON.stringify(S));
 const tc=()=>S.rc/Math.max((S.decks*52-S.n)/52,0.5);
@@ -140,7 +142,9 @@ function outcome(){
   return {net,lines,waiting:allDone&&!dealerDone};
 }
 
-function tap(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
+function tap(c){try{tap_(c)}catch(e){oops(e)}}
+function oops(e){console.error(e);resetRound();save();try{render()}catch(_){};flash('Glitch fixed, new round')}
+function tap_(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
   if(S.phase=='bet'){ // first tap of a round
     if(S.bet>0){S.mine=[c];S.phase='mine'} else {S.phase='others'}
   } else if(S.phase=='mine'&&S.up==null){
@@ -152,7 +156,8 @@ function tap(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
     if(S.extra){S.extra=false} else {S.dh.push(c)}
   }
   save();render()}
-function act(a){snap();buzz();
+function act(a){try{act_(a)}catch(e){oops(e)}}
+function act_(a){snap();buzz();
   if(a=='split'){S.pair=S.mine[0];S.mine=[S.pair];S.split=1}
   else if(a=='done')endHand();
   else if(a=='anyway'){S.anyway=true}
@@ -166,6 +171,8 @@ function act(a){snap();buzz();
     if(u>0&&r!='N'){S.stats[r]++;S.stats.rounds++;const d={W:u,L:-u,P:0,B:1.5*u}[r]*(S.doubled&&!S.split?2:1);S.stats.net+=d;S.bank=+(S.bank+d*S.unit).toFixed(2)}
     Object.assign(S,{phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',anyway:false,noSplit:false,noDbl:false,hands:[],dh:[],extra:false});}
   save();render()}
+function resetRound(){Object.assign(S,{phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',anyway:false,noSplit:false,noDbl:false,hands:[],dh:[],extra:false})}
+function skipRound(){snap();resetRound();save();render();flash('Next round')}
 function undo(){const h=H.pop();if(h){S=JSON.parse(h);save();render();flash('Undone')}}
 function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return;
   snap();if(S.n>20){S.shoes=(S.shoes||[]).concat([S.n]).slice(-5)}
@@ -173,7 +180,8 @@ function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return
 function toggleTable(){S.table=S.table=='classic'?'inf':'classic';setRules(S.table);save();render()}
 function setBank(){const v=prompt('How much money do you have in your casino account right now? ($)',S.bank);if(v&&+v>0){S.bank=+v;save();render()}}
 
-function render(){
+function render(){try{render_()}catch(e){console.error(e);resetRound();render_()}}
+function render_(){
   const big=$('big'),A=$('act');let step='',title='',msg='',hand='';big.style.display='none';A.innerHTML='';
   const btn=(label,a,cls)=>`<button class="${cls||''}" onclick="act('${a}')">${label}</button>`;
   if(S.phase=='bet'){
@@ -212,7 +220,7 @@ function render(){
       if(!o||o.waiting){
         msg=(o&&o.waiting?(o.lines.join('<br>')+'<br><br>'):'')+(dl==1?"👆 The dealer will now flip their hidden card. <b>Tap it.</b>":"👆 If the dealer draws another card, <b>tap it</b>.")+"<br><small>The app then tells you if you won.</small>"+
             (S.extra?"<br><b>Next tap = extra card (not the dealer's).</b>":"");
-        A.innerHTML=(o&&o.waiting?btn('▶️ Next round','next','main'):'')+btn('➕ Next card is NOT the dealer\'s','extra');
+        A.innerHTML=(o&&o.waiting?btn('▶️ Next round','next','main'):'')+btn('➕ Next card is NOT the dealer\'s','extra')+((S.dh||[]).length>=2?btn('⏭ Round is over','rN'):'');
       } else {
         big.style.display='block'; big.className=o.net>0?'D':o.net<0?'sit':'X';
         big.textContent=o.net>0?'✅ YOU WIN':o.net<0?'❌ YOU LOSE':'🤝 TIE';
@@ -224,7 +232,7 @@ function render(){
     }
   }
   $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
-  const s=S.stats;$('foot').textContent=`Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
+  const s=S.stats;$('foot').textContent=`v7 · Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
     ((S.shoes&&S.shoes.length)?`\nLast shoes dealt: `+S.shoes.map(n=>Math.round(100*n/(S.decks*52))+'%').join(', ')+` (higher = better table)`:'');
 }
 if(typeof module!=='undefined'){module.exports={decide,betUnits,total,setRules}}
