@@ -98,7 +98,7 @@ let S=JSON.parse(LS.getItem('bjh2')||'null')||fresh(); let H=[];
 if(!S.v2unit){S.unit=1;S.v2unit=true}
 if(S.bank==null)S.bank=100;
 S.table='inf'; setRules('inf');
-if(S.ver!=='v7'){if(S.phase!=='bet')resetRound();S.hands=S.hands||[];S.dh=S.dh||[];S.ver='v7'}
+if(S.ver!=='v8'){if(S.phase!=='bet')resetRound();S.hands=S.hands||[];S.dh=S.dh||[];S.ver='v8'}
 const autoUnit=()=>Math.max(1,Math.floor(S.bank/100)); // 1% of balance, $1 minimum
 const save=()=>LS.setItem('bjh2',JSON.stringify(S));
 const tc=()=>S.rc/Math.max((S.decks*52-S.n)/52,0.5);
@@ -147,6 +147,8 @@ function oops(e){console.error(e);resetRound();save();try{render()}catch(_){};fl
 function tap_(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
   if(S.phase=='bet'){ // first tap of a round
     if(S.bet>0){S.mine=[c];S.phase='mine'} else {S.phase='others'}
+  } else if(S.phase=='mine'&&S.extra){
+    S.extra=false;
   } else if(S.phase=='mine'&&S.up==null){
     S.up=c;
   } else if(S.phase=='mine'){
@@ -206,6 +208,7 @@ function render_(){
     if(p&&p[0]=='P')A.innerHTML+=btn('✂️ I split','split','main')+btn("🚫 Game won't let me split",'nosplit');
     if(p&&p[0]=='D'&&S.mine.length==2)A.innerHTML+=btn("🚫 Game won't let me double",'nodbl');
     A.innerHTML+=btn(S.split==1?'➡️ Hand 1 done → hand 2':'➡️ My hand is done','done');
+    if(S.up!=null&&S.mine.length>=2)A.innerHTML+=btn(S.extra?'✅ Next tap = someone else\'s card':'➕ Next card is someone else\'s','extra');
   } else if(S.phase=='others'){
     const sat=S.bet==0;
     step=sat?'SITTING OUT':'STEP 3 of 3';title=sat?'Tap every card':'Tap the other cards';
@@ -220,7 +223,7 @@ function render_(){
       if(!o||o.waiting){
         msg=(o&&o.waiting?(o.lines.join('<br>')+'<br><br>'):'')+(dl==1?"👆 The dealer will now flip their hidden card. <b>Tap it.</b>":"👆 If the dealer draws another card, <b>tap it</b>.")+"<br><small>The app then tells you if you won.</small>"+
             (S.extra?"<br><b>Next tap = extra card (not the dealer's).</b>":"");
-        A.innerHTML=(o&&o.waiting?btn('▶️ Next round','next','main'):'')+btn('➕ Next card is NOT the dealer\'s','extra')+((S.dh||[]).length>=2?btn('⏭ Round is over','rN'):'');
+        A.innerHTML=(o&&o.waiting?btn('▶️ Next round','next','main'):'')+btn(S.extra?'✅ Next tap = not the dealer\'s':'➕ Next card is NOT the dealer\'s','extra')+((S.dh||[]).length>=2?btn('⏭ Round is over','rN'):'');
       } else {
         big.style.display='block'; big.className=o.net>0?'D':o.net<0?'sit':'X';
         big.textContent=o.net>0?'✅ YOU WIN':o.net<0?'❌ YOU LOSE':'🤝 TIE';
@@ -232,7 +235,7 @@ function render_(){
     }
   }
   $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
-  const s=S.stats;$('foot').textContent=`v7 · Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
+  const s=S.stats;$('foot').textContent=`v8 · Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
     ((S.shoes&&S.shoes.length)?`\nLast shoes dealt: `+S.shoes.map(n=>Math.round(100*n/(S.decks*52))+'%').join(', ')+` (higher = better table)`:'');
 }
 if(typeof module!=='undefined'){module.exports={decide,betUnits,total,setRules}}
