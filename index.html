@@ -117,8 +117,28 @@ function play(){
   const a=decide(m,S.up,tc(),cd,cs); return[a,BIG[a]];
 }
 function endHand(){const p=play();const l=p?p[1]:'done';
+  S.hands=(S.hands||[]).concat([{c:S.mine.slice(),d:S.doubled,bj:S.mine.length==2&&total(S.mine)[0]==21&&!S.split}]);
   if(S.split==1){S.done=l;S.mine=[S.pair];S.split=2;S.doubled=false;S.noDbl=false;flash('Hand 2');return}
-  S.done=S.split==2&&S.done?S.done+' / '+l:l; S.phase='others';}
+  S.done=S.split==2&&S.done?S.done+' / '+l:l; S.phase='others'; S.dh=[S.up]; S.extra=false;}
+// ---- automatic result: my finished hands vs dealer's hand ----
+function outcome(){
+  const hs=S.hands||[]; if(!hs.length)return null;
+  const allDone=hs.every(h=>total(h.c)[0]>21||h.bj);
+  const dh=S.dh||[]; const [dt]=total(dh);
+  const dealerBJ=dh.length==2&&dt==21;
+  const dealerDone=dt>=17||dealerBJ;
+  if(!allDone&&!dealerDone)return null;           // still waiting for dealer cards
+  let net=0; const lines=[];
+  for(const h of hs){const [t]=total(h.c), m=h.d?2:1;
+    if(t>21){net-=m;lines.push('💥 Bust: lost')}
+    else if(h.bj){ if(dealerBJ){lines.push('🤝 Both blackjack: tie')} else {net+=1.5;lines.push('🎉 Blackjack: paid 3:2')} }
+    else if(dealerBJ){net-=1;lines.push('Dealer blackjack: lost')}
+    else if(dt>21){net+=m;lines.push('✅ Dealer busts: you win')}
+    else if(t>dt){net+=m;lines.push(`✅ ${t} beats ${dt}: you win`)}
+    else if(t<dt){net-=m;lines.push(`❌ ${dt} beats ${t}: you lose`)}
+    else lines.push(`🤝 ${t} vs ${dt}: tie`)}
+  return {net,lines,waiting:allDone&&!dealerDone};
+}
 
 function tap(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
   if(S.phase=='bet'){ // first tap of a round
@@ -128,6 +148,8 @@ function tap(c){snap();S.rc+=HILO[c];S.n++;buzz();flash(NM(c));
   } else if(S.phase=='mine'){
     const b=play(); if(b&&b[0]=='D'&&S.mine.length==2)S.doubled=true;
     S.mine.push(c); const p=play(); if(p&&(p[0]=='S'||p[0]=='X'))endHand();
+  } else if(S.phase=='others'&&S.bet>0){
+    if(S.extra){S.extra=false} else {S.dh.push(c)}
   }
   save();render()}
 function act(a){snap();buzz();
@@ -136,9 +158,13 @@ function act(a){snap();buzz();
   else if(a=='anyway'){S.anyway=true}
   else if(a=='nosplit'){S.noSplit=true}
   else if(a=='nodbl'){S.noDbl=true}
-  else if(a[0]=='r'){const u=S.bet,r=a[1];
+  else if(a=='extra'){S.extra=true}
+  else if(a=='next'){const o=outcome();const u=S.bet;
+    if(o&&u>0){const d=o.net*u;S.stats.rounds++;S.stats[d>0?'W':d<0?'L':'P']++;S.stats.net+=d;S.bank=+(S.bank+d*S.unit).toFixed(2)}
+    a='rN';}
+  if(a[0]=='r'){const u=S.bet,r=a[1];
     if(u>0&&r!='N'){S.stats[r]++;S.stats.rounds++;const d={W:u,L:-u,P:0,B:1.5*u}[r]*(S.doubled&&!S.split?2:1);S.stats.net+=d;S.bank=+(S.bank+d*S.unit).toFixed(2)}
-    Object.assign(S,{phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',anyway:false,noSplit:false,noDbl:false});}
+    Object.assign(S,{phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',anyway:false,noSplit:false,noDbl:false,hands:[],dh:[],extra:false});}
   save();render()}
 function undo(){const h=H.pop();if(h){S=JSON.parse(h);save();render();flash('Undone')}}
 function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return;
@@ -175,11 +201,26 @@ function render(){
   } else if(S.phase=='others'){
     const sat=S.bet==0;
     step=sat?'SITTING OUT':'STEP 3 of 3';title=sat?'Tap every card':'Tap the other cards';
-    if(!sat&&S.done)hand='You: <b>'+S.done+'</b>';
-    msg=sat?"Tap <b>every</b> card on the table: dealer and all players. Any order."
-           :`Tap every other card that comes out: dealer's cards${S.table=='classic'?", other players' cards":", extra cards dealt"}. Any order.<br>Then tap how you did:`;
-    A.innerHTML=sat?btn('✅ Round over → next round','rN','main')
-      :btn('✅ I won','rW')+btn('❌ I lost','rL')+btn('🤝 Tie','rP')+btn('🎉 Blackjack','rB');
+    if(sat){msg="Tap <b>every</b> card on the table: dealer and all players. Any order.";
+      A.innerHTML=btn('✅ Round over → next round','rN','main');}
+    else{
+      const [dt,ds]=total(S.dh||[]); const o=outcome();
+      const mine=(S.hands||[]).map(h=>h.c.map(NM).join(' ')+' = '+total(h.c)[0]).join('  |  ');
+      hand=`You: <b>${mine}</b><br>Dealer: <b>${(S.dh||[]).map(NM).join(' ')}</b> = ${ds?'soft ':''}${dt}`;
+      title='Dealer\'s turn';
+      if(!o||o.waiting){
+        msg=(o&&o.waiting?(o.lines.join('<br>')+'<br><br>'):'')+"👆 Tap the <b>dealer's</b> cards as they flip: the hidden card, then any it draws."+
+            (S.extra?"<br><b>Next tap = extra card (not the dealer's).</b>":"");
+        A.innerHTML=(o&&o.waiting?btn('▶️ Next round','next','main'):'')+btn('➕ Next card is NOT the dealer\'s','extra');
+      } else {
+        big.style.display='block'; big.className=o.net>0?'D':o.net<0?'sit':'X';
+        big.textContent=o.net>0?'✅ YOU WIN':o.net<0?'❌ YOU LOSE':'🤝 TIE';
+        const amt=o.net*S.bet*S.unit; msg=o.lines.join('<br>')+`<br><b>${amt>=0?'+':'-'}$${+Math.abs(amt).toFixed(2)}</b>`;
+        A.innerHTML=btn('▶️ Next round','next','main')+
+          '<div style="width:100%;font-size:12px;color:#8ab;margin-top:4px">Wrong result? Fix it:</div>'+
+          btn('I won','rW')+btn('I lost','rL')+btn('Tie','rP');
+      }
+    }
   }
   $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
   const s=S.stats;$('foot').textContent=`Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
