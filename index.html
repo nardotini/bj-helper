@@ -86,9 +86,10 @@ const BIG={H:'🟡 HIT',S:'🔵 STAND',D:'🟢 DOUBLE',P:'🟣 SPLIT'};
 const HOW={H:'Take a card in the game, then tap it here.',S:'Stand in the game. Your hand is done.',
   D:'Press DOUBLE in the game. You get one card. Tap it here.',P:'Press SPLIT in the game, then tap ✂️ below.'};
 let LS;try{LS=window.localStorage;LS.getItem('x')}catch(e){LS={getItem:()=>null,setItem:()=>{}}}
-const fresh=()=>({rc:0,n:0,decks:8,unit:5,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',bet:0,
+const fresh=()=>({rc:0,n:0,decks:8,unit:1,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:'',bet:0,
   stats:{W:0,L:0,P:0,B:0,net:0,rounds:0}});
 let S=JSON.parse(LS.getItem('bjh2')||'null')||fresh(); let H=[];
+if(!S.v2unit){S.unit=1;S.v2unit=true}
 const save=()=>LS.setItem('bjh2',JSON.stringify(S));
 const tc=()=>S.rc/Math.max((S.decks*52-S.n)/52,0.5);
 const snap=()=>{H.push(JSON.stringify(S));if(H.length>300)H.shift()};
@@ -142,7 +143,7 @@ function render(){
       msg="Just watch. When cards come out, tap <b>every card</b> you see (dealer + everyone)."+
           "<br><small>Sitting out is normal at the start of a shoe.</small>";
       A.innerHTML=btn('🃏 I want to play anyway (min bet)','anyway');}
-    else{big.className='bet';big.textContent='💰 BET $'+(S.bet*S.unit);step='NEW ROUND · STEP 1 of 3';title='Place your bet';
+    else{big.className='bet';big.textContent='💰 BET $'+(+(S.bet*S.unit).toFixed(2));step='NEW ROUND · STEP 1 of 3';title='Place your bet';
       msg="When the cards come out, tap the <b>DEALER's</b> face-up card first 👇";}
   } else if(S.phase=='mine'){
     const [t,soft]=S.mine.length?total(S.mine):[0,false];
