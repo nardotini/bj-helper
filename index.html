@@ -43,6 +43,7 @@ body{padding:10px;max-width:520px;margin:auto}
   <button onclick="undo()">↶ Undo</button>
   <button onclick="newShoe()">🔀 Dealer shuffled</button>
   <button onclick="setBank()">💵 My balance</button>
+  <button id="tbl" onclick="toggleTable()"></button>
 </div>
 <div id="foot"></div>
 
@@ -50,12 +51,16 @@ body{padding:10px;max-width:520px;margin:auto}
 // ---- strategy: 8D, S17, DAS, ENHC, Hi-Lo + Illustrious 18 (verified against bj.py) ----
 const HILO={2:1,3:1,4:1,5:1,6:1,7:0,8:0,9:0,10:-1,11:-1};
 function total(c){let t=c.reduce((a,b)=>a+b,0),a=c.filter(x=>x==11).length;while(t>21&&a){t-=10;a--}return[t,a>0]}
+// table rules: 'inf' = Infinite Blackjack (dealer peeks, no double after split); 'classic' = 7-seat ENHC, DAS
+let RULES={das:false,enhcLA:false};
+function setRules(t){RULES=t=='classic'?{das:true,enhcLA:true}:{das:false,enhcLA:false}}
 function basic(c,up,cd,cs){
-  const [t,soft]=total(c);
+  const [t,soft]=total(c); const das=RULES.das, la=RULES.enhcLA;
   if(cs&&c.length==2&&c[0]==c[1]){const p=c[0];
-    if(p==11&&up!=11)return'P'; if(p==8&&up<10)return'P';
+    if(p==11&&!(la&&up==11))return'P'; if(p==8&&!(la&&up>=10))return'P';
     if(p==9&&[2,3,4,5,6,8,9].includes(up))return'P'; if(p==7&&up<=7)return'P';
-    if(p==6&&up<=6)return'P'; if(p==4&&(up==5||up==6))return'P'; if((p==2||p==3)&&up<=7)return'P';}
+    if(p==6&&(das?up<=6:(up>=3&&up<=6)))return'P'; if(p==4&&das&&(up==5||up==6))return'P';
+    if((p==2||p==3)&&(das?up<=7:(up>=4&&up<=7)))return'P';}
   if(soft){
     if(t>=19)return'S';
     if(t==18){if(up>=3&&up<=6)return cd?'D':'S'; if([2,7,8].includes(up))return'S'; return'H'}
@@ -64,7 +69,7 @@ function basic(c,up,cd,cs){
     if(t==13||t==14)return(up>=5&&up<=6&&cd)?'D':'H';
     return'H';}
   if(t>=17)return'S'; if(t>=13)return up<=6?'S':'H'; if(t==12)return(up>=4&&up<=6)?'S':'H';
-  if(t==11){if(up>=10)return'H';return cd?'D':'H'}
+  if(t==11){if(up==11)return'H'; if(up==10&&la)return'H'; return cd?'D':'H'}
   if(t==10)return(up<=9&&cd)?'D':'H'; if(t==9)return(up>=3&&up<=6&&cd)?'D':'H'; return'H';
 }
 const I18={'h16-10':[0,'S'],'h15-10':[4,'S'],'p10-5':[5,'P'],'p10-6':[4,'P'],'h10-10':[4,'D'],'h12-3':[2,'S'],
@@ -92,6 +97,7 @@ const fresh=()=>({rc:0,n:0,decks:8,unit:1,phase:'bet',mine:[],up:null,split:0,pa
 let S=JSON.parse(LS.getItem('bjh2')||'null')||fresh(); let H=[];
 if(!S.v2unit){S.unit=1;S.v2unit=true}
 if(S.bank==null)S.bank=100;
+if(!S.table)S.table='inf'; setRules(S.table);
 const autoUnit=()=>Math.max(1,Math.floor(S.bank/100)); // 1% of balance, $1 minimum
 const save=()=>LS.setItem('bjh2',JSON.stringify(S));
 const tc=()=>S.rc/Math.max((S.decks*52-S.n)/52,0.5);
@@ -108,7 +114,7 @@ function play(){
   if(S.doubled&&m.length>=3)return['X','✅ Doubled. Done'];
   if(t==21)return['X','🔵 21. Stand'];
   if(S.split&&S.pair==11)return['X','✅ Split aces: done'];
-  const cd=m.length==2, cs=m.length==2&&m[0]==m[1]&&!S.split;
+  const cd=m.length==2&&!(S.split&&!RULES.das), cs=m.length==2&&m[0]==m[1]&&!S.split;
   const a=decide(m,S.up,tc(),cd,cs); return[a,BIG[a]];
 }
 function endHand(){const p=play();const l=p?p[1]:'done';
@@ -135,6 +141,7 @@ function undo(){const h=H.pop();if(h){S=JSON.parse(h);save();render();flash('Und
 function newShoe(){if(!confirm('Dealer shuffled? This resets the count.'))return;
   snap();if(S.n>20){S.shoes=(S.shoes||[]).concat([S.n]).slice(-5)}
   Object.assign(S,{rc:0,n:0,phase:'bet',mine:[],up:null,split:0,pair:null,doubled:false,done:''});save();render()}
+function toggleTable(){S.table=S.table=='classic'?'inf':'classic';setRules(S.table);save();render()}
 function setBank(){const v=prompt('How much money do you have in your casino account right now? ($)',S.bank);if(v&&+v>0){S.bank=+v;save();render()}}
 
 function render(){
@@ -166,15 +173,16 @@ function render(){
     step=sat?'SITTING OUT':'STEP 3 of 3';title=sat?'Tap every card':'Tap the other cards';
     if(!sat&&S.done)hand='You: <b>'+S.done+'</b>';
     msg=sat?"Tap <b>every</b> card on the table: dealer and all players. Any order."
-           :"Tap everyone else's cards and the dealer's other cards. Any order.<br>Then tap how you did:";
+           :`Tap every other card that comes out: dealer's cards${S.table=='classic'?", other players' cards":", extra cards dealt"}. Any order.<br>Then tap how you did:`;
     A.innerHTML=sat?btn('✅ Round over → next round','rN','main')
       :btn('✅ I won','rW')+btn('❌ I lost','rL')+btn('🤝 Tie','rP')+btn('🎉 Blackjack','rB');
   }
+  $('tbl').textContent=S.table=='classic'?'🎰 Classic table':'🎰 Infinite BJ';
   $('step').textContent=step;$('title').textContent=title;$('msg').innerHTML=msg;$('hand').innerHTML=hand;
   const s=S.stats;$('foot').textContent=`Balance ~$${S.bank} · bets sized at 1% ($${autoUnit()} per unit)\n${s.rounds} rounds played · ${S.n} cards seen this shoe`+
     ((S.shoes&&S.shoes.length)?`\nLast shoes dealt: `+S.shoes.map(n=>Math.round(100*n/(S.decks*52))+'%').join(', ')+` (higher = better table)`:'');
 }
-if(typeof module!=='undefined'){module.exports={decide,betUnits,total}}
+if(typeof module!=='undefined'){module.exports={decide,betUnits,total,setRules}}
 else{try{Telegram.WebApp.ready();Telegram.WebApp.expand()}catch(e){} render();}
 </script>
 </body></html>
